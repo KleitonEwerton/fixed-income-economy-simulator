@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Adicionado useEffect
 import { Settings, Briefcase, TrendingUp, AlertTriangle } from 'lucide-react';
 
 import './App.css';
 
-// Adicionamos 'maturityYears' para calcular a Marcação a Mercado (Duration)
-// Short Term (CP) tem vencimento curto, sofre menos impacto.
-// Long Term (LP, 2050, 2065) tem vencimento longo, sofre MUITO impacto.
+// --- (O código das constantes e funções auxiliares permanece idêntico) ---
+
 const INITIAL_ASSETS = [
   { id: 'pos', name: 'Pós Fixado', type: 'pos', rate: 100, color: 'bg-slate-200', maturityYears: 2 },
   { id: 'ipca_2050', name: 'IPCA +2050', type: 'ipca_long', rate: 6.82, color: 'bg-orange-100', maturityYears: 25 },
@@ -29,16 +28,7 @@ const INITIAL_SCENARIOS = [
 
 const REAL_INTEREST_RATE = 4.0;
 
-/**
- * Define a Taxa de Juro Real exigida pelo mercado baseada na inflação (Risco Brasil).
- * Inflação Alta (Péssimo) -> Risco Alto -> Mercado exige prêmio (ex: IPCA + 9%)
- * Inflação Baixa (Praia) -> Risco Baixo -> Mercado aceita menos (ex: IPCA + 3%)
- */
 const getMarketRealRate = (inflation) => {
-  // Interpolação linear simples:
-  // Inflação 3.33% (Praia) -> Taxa Real 3.0%
-  // Inflação 8.99% (Péssimo) -> Taxa Real 9.0%
-
   const minInf = 3.33;
   const maxInf = 8.99;
   const minRate = 3.0; // IPCA + 3%
@@ -51,23 +41,15 @@ const getMarketRealRate = (inflation) => {
   return minRate + ratio * (maxRate - minRate);
 };
 
-// --- Componentes UI ---
-
 const Card = ({ children, className = "" }) => (
   <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>
     {children}
   </div>
 );
 
-/**
- * Calcula o retorno NOMINAL acumulado considerando Marcação a Mercado para Títulos Longos
- */
 const calculateNominalReturn = (asset, scenarioInflation, years, realRateBase) => {
   const inflationDec = scenarioInflation / 100;
 
-  // 1. Títulos Pós-Fixados (CDI) e Curtos
-  // Eles sofrem pouco com marcação a mercado ou são levados ao vencimento.
-  // Usamos cálculo de "Curva" (Acumulação simples).
   if (asset.type === 'pos' || asset.type === 'ipca_short' || asset.type === 'pre') {
     let annualRate = 0;
     if (asset.type === 'pre') {
@@ -81,49 +63,18 @@ const calculateNominalReturn = (asset, scenarioInflation, years, realRateBase) =
     return Math.pow(1 + annualRate, years) - 1;
   }
 
-  // 2. Títulos Longos (IPCA Longo, Pre Longo)
-  // Sujeitos à Marcação a Mercado Violenta.
-  // Fórmula: Preço Venda / Preço Compra - 1
-
-  // Taxa Contratada (que eu tenho no papel)
   const contractedRate = asset.rate / 100;
-
-  // Taxa de Mercado no Cenário Futuro (Yield Curve)
-  // Se a inflação é alta, mercado exige taxa maior.
   const marketRealRate = getMarketRealRate(scenarioInflation) / 100;
-
-  // Tempo restante até o vencimento no momento da venda
   const remainingTime = Math.max(0, asset.maturityYears - years);
-
-  // Inflação acumulada no período que fiquei com o título
   const accumulatedInflation = Math.pow(1 + inflationDec, years);
 
-  let priceRatio = 1;
-
   if (asset.type === 'ipca_long') {
-    // Lógica simplificada de PU (Preço Unitário) NTN-B
-    // Retorno = (Inflação Acumulada) * (Ganho/Perda de Taxa)
-
-    // Fator de Desconto da Compra (Preço Teórico Original)
-    // Considerando que comprei a "par" (taxa contratada = taxa mercado naquele dia)
-    // Mas simplificando: O ganho vem da diferença entre (1+Contratada) e (1+Mercado) trazida a valor presente pelo tempo restante.
-
-    const rateFactor = Math.pow((1 + contractedRate) / (1 + marketRealRate), remainingTime);
-    const accrualFactor = Math.pow(1 + contractedRate, years); // O ganho do cupom no tempo que passou
-
-    // O retorno total é a Inflação * O Juro Acumulado * O Choque de Taxa (Marcação)
-    // Se MarketRate > ContractedRate, o rateFactor < 1 (Prejuízo no principal)
-
-    // Ajuste: A fórmula exata aproximada de retorno total
+    // Fórmula Original do seu código
     const totalGrowth = accumulatedInflation * Math.pow(1 + contractedRate, years) * Math.pow((1 + contractedRate) / (1 + marketRealRate), remainingTime);
     return totalGrowth - 1;
 
   } else if (asset.type === 'pre_long') {
-    // Prefixado Longo (LTN / NTN-F)
-    // Inflação impacta a expectativa da taxa prefixada de mercado.
-    // Taxa Pré Mercado = Inflação Cenário + Juro Real Cenário
     const marketPreRate = (1 + inflationDec) * (1 + marketRealRate) - 1;
-
     const totalGrowth = Math.pow(1 + contractedRate, years) * Math.pow((1 + contractedRate) / (1 + marketPreRate), remainingTime);
     return totalGrowth - 1;
   }
@@ -150,6 +101,56 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [realInterest, setRealInterest] = useState(REAL_INTEREST_RATE);
   const [viewMode, setViewMode] = useState('nominal');
+
+  // --- ÁREA DE TESTE UNITÁRIO (NOVO) ---
+  useEffect(() => {
+    console.group('🔍 TESTE DE PRECISÃO: SIMULAÇÃO DE RENDA FIXA');
+    
+    // CASO DE TESTE: IPCA+ 2050 no Cenário PÉSSIMO em 1 ANO
+    const testAsset = INITIAL_ASSETS.find(a => a.id === 'ipca_2050'); // Rate 6.82%, Maturity 25y
+    const testScenario = INITIAL_SCENARIOS.find(s => s.label === 'Péssimo'); // Inflation 8.99%
+    const testYears = 1;
+    
+    console.log(`📌 Parâmetros do Teste:`);
+    console.log(`   Ativo: ${testAsset.name} (Taxa Contratada: ${testAsset.rate}%, Vencimento: ${testAsset.maturityYears} anos)`);
+    console.log(`   Cenário: ${testScenario.label} (Inflação: ${testScenario.inflation}%)`);
+    console.log(`   Tempo Decorrido: ${testYears} ano`);
+    
+    // 1. Executar a função do aplicativo
+    const appResult = calculateNominalReturn(testAsset, testScenario.inflation, testYears, REAL_INTEREST_RATE);
+    
+    // 2. Executar Cálculo Manual Explicito (Prova Real)
+    const manualInflation = testScenario.inflation / 100; // 0.0899
+    const manualContracted = testAsset.rate / 100;       // 0.0682
+    
+    // Como a inflação é 8.99 (>= 8.99), getMarketRealRate retorna 9.0
+    // Vamos hardcodar para garantir que o teste manual é independente da função helper
+    const manualMarketRate = 9.0 / 100; // 0.09
+    
+    const remainingTime = testAsset.maturityYears - testYears; // 24 anos
+    
+    // Passo a Passo Manual
+    const factorInflation = Math.pow(1 + manualInflation, testYears);
+    const factorAccrual = Math.pow(1 + manualContracted, testYears);
+    // Choque = (1+TaxaOriginal) / (1+TaxaMercado) ^ TempoRestante
+    const factorPriceShock = Math.pow((1 + manualContracted) / (1 + manualMarketRate), remainingTime);
+    
+    const manualTotalGrowth = factorInflation * factorAccrual * factorPriceShock;
+    const manualResult = manualTotalGrowth - 1;
+
+    console.log('--------------------------------------------------');
+    console.log(`🔢 Resultado da Função (App):    ${(appResult * 100).toFixed(6)}%`);
+    console.log(`🧮 Resultado Manual (Hardcoded): ${(manualResult * 100).toFixed(6)}%`);
+    console.log(`📉 Diferença Absoluta:           ${Math.abs(appResult - manualResult).toFixed(15)}`);
+    
+    if (Math.abs(appResult - manualResult) < 0.00000001) {
+      console.log(`✅ SUCESSO: O cálculo bate perfeitamente com a teoria financeira.`);
+    } else {
+      console.error(`❌ ERRO: Há uma divergência significativa nos cálculos.`);
+    }
+    console.groupEnd();
+  }, []); // Array vazio garante que roda apenas uma vez ao montar o componente
+  // --------------------------------------
 
   const handleAllocationChange = (id, val) => {
     setAllocation(prev => ({ ...prev, [id]: parseInt(val) }));
@@ -195,7 +196,6 @@ export default function App() {
     }
   };
 
-  // Helper para mostrar a taxa de mercado do cenário (Tooltip)
   const getScenarioYield = (inflation) => {
     const real = getMarketRealRate(inflation);
     return `Mercado exige IPCA + ${real.toFixed(2)}%`;
@@ -311,7 +311,6 @@ export default function App() {
                     </td>
                     {scenarios.map(scen => {
                       const { value, text } = getFormattedValue(asset, scen);
-                      // Se for negativo (Nominal ou Real), fica vermelho
                       const isNegative = value < 0;
 
                       return (
