@@ -3,18 +3,16 @@ import { Settings, Briefcase, TrendingUp, AlertTriangle } from 'lucide-react';
 
 import './App.css';
 
-// --- Configurações Iniciais e Constantes ---
-
 // Adicionamos 'maturityYears' para calcular a Marcação a Mercado (Duration)
 // Short Term (CP) tem vencimento curto, sofre menos impacto.
 // Long Term (LP, 2050, 2065) tem vencimento longo, sofre MUITO impacto.
 const INITIAL_ASSETS = [
   { id: 'pos', name: 'Pós Fixado', type: 'pos', rate: 100, color: 'bg-slate-200', maturityYears: 2 },
-  { id: 'ipca_2050', name: 'IPCA +2050', type: 'ipca_long', rate: 6.2, color: 'bg-orange-100', maturityYears: 25 },
-  { id: 'renda_2065', name: 'RENDA +2065', type: 'ipca_long', rate: 6.4, color: 'bg-orange-200', maturityYears: 40 },
-  { id: 'ipca_cp', name: 'IPCA+ CP', type: 'ipca_short', rate: 5.8, color: 'bg-yellow-100', maturityYears: 2 },
-  { id: 'pre_cp', name: 'PREFIXADO CP', type: 'pre', rate: 10.5, color: 'bg-blue-100', maturityYears: 3 },
-  { id: 'pre_lp', name: 'PREFIXADO LP', type: 'pre_long', rate: 11.8, color: 'bg-blue-200', maturityYears: 10 },
+  { id: 'ipca_2050', name: 'IPCA +2050', type: 'ipca_long', rate: 6.82, color: 'bg-orange-100', maturityYears: 25 },
+  { id: 'renda_2065', name: 'RENDA +2065', type: 'ipca_long', rate: 7.09, color: 'bg-orange-200', maturityYears: 40 },
+  { id: 'ipca_cp', name: 'IPCA+ 2029', type: 'ipca_short', rate: 7.75, color: 'bg-yellow-100', maturityYears: 4 },
+  { id: 'pre_cp', name: 'PREFIXADO 2028', type: 'pre', rate: 12.90, color: 'bg-blue-100', maturityYears: 3 },
+  { id: 'pre_lp', name: 'PREFIXADO 2035', type: 'pre_long', rate: 13.66, color: 'bg-blue-200', maturityYears: 10 },
 ];
 
 const INITIAL_SCENARIOS = [
@@ -60,8 +58,6 @@ const Card = ({ children, className = "" }) => (
     {children}
   </div>
 );
-
-// --- Lógica de Cálculo ---
 
 /**
  * Calcula o retorno NOMINAL acumulado considerando Marcação a Mercado para Títulos Longos
